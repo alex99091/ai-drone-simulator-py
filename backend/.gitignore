@@ -1,6 +1,22 @@
-venv/
+# Python bytecode files
 __pycache__/
 *.py[cod]
+
+# Virtual environments
+venv/
+
+# IntelliJ project files
 .idea/
 *.iml
-yolov5/runs/
+
+# YOLOv5 cache
+.yolov5/
+
+# Log files
+*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# macOS specific files
+.DS_Store
