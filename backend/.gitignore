@@ -45,3 +45,10 @@ env/
 htmlcov/
 coverage.xml
 *.*
+
+# YOLOv5 / Ultralytics 관련 캐시 및 설정
+runs/
+*.onnx
+*.tflite
+*.mlmodel
+*.torchscript
