@@ -1,22 +1,47 @@
-# Python bytecode files
+# Python
 __pycache__/
 *.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.pyd
 
-# Virtual environments
+# Virtual Environment
+.venv/
 venv/
+ENV/
+env/
 
-# IntelliJ project files
-.idea/
-*.iml
+# VSCode Settings
+.vscode/
 
-# YOLOv5 cache
-.yolov5/
-
-# Log files
-*.log
-
-# Jupyter Notebook checkpoints
+# Jupyter Notebooks
 .ipynb_checkpoints/
 
-# macOS specific files
+# Logs and local data
+*.log
+*.db
+*.sqlite3
+
+# PyTorch cache and model files
+*.pt
+*.pth
+*.ckpt
+
+# PyTorch Hub cache
+~/.cache/torch/
+.cache/torch/
+
+# MacOS
 .DS_Store
+
+# dotenv
+.env
+.env.*
+
+# Test reports
+htmlcov/
+coverage.xml
+*.*
