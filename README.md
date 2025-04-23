@@ -20,19 +20,36 @@ and moves a virtual drone accordingly
 ## 🧱 Project Structure
 ```bash
 
-ai-drone-simulator/
-├── main.py                # Main application loop
-├── config/
-│   └── settings.py        # Drone speed and initial values
-├── core/
-│   ├── detector.py        # Human detection logic (YOLO)
-│   ├── tracker.py         # Drone position tracking logic
-│   └── visualizer.py      # Video feed rendering with overlays
-├── utils/
-│   └── helper.py          # Utility functions
-├── models/                # (Optional) Model storage
-├── venv/                  # Virtual environment (excluded from repo)
-└── README.md
+ai-drone-simulator-py/
+├── backend/
+│   ├── app/                        # 실행 스크립트 모음
+│   │   ├── simulate_drone.py      # 실시간 YOLO + 드론 시뮬
+│   │   ├── run_detector.py        # 감지기 단독 실행
+│   │   ├── run_tracker.py         # 드론 추적기 테스트
+│   │   └── run_api.py             # Flask API 실행 엔트리포인트
+│   ├── api/                        # Flask API 구성
+│   │   ├── __init__.py
+│   │   ├── controller.py          # 라우터 정의
+│   │   ├── dto.py                 # 요청/응답 모델 정의
+│   │   └── service.py             # 드론 추적 로직 래퍼
+│   ├── config/
+│   │   └── settings.py            # 기본 설정값
+│   ├── core/
+│   │   ├── detector.py            # YOLO 기반 사람 감지
+│   │   ├── drone.py               # 드론 객체 로직
+│   │   ├── tracker.py             # 드론 위치 추적기
+│   │   └── visualizer.py          # 시각화 로직 (OpenCV)
+│   ├── utils/
+│   │   └── helper.py              # 범용 함수들
+│   ├── tests/                     # 단위 테스트
+│   │   ├── test_detector.py
+│   │   ├── test_drone.py
+│   │   ├── test_tracker.py
+│   │   ├── test_visualizer.py
+│   │   └── test_api_service.py   # (작성 예정)
+│   └── requirements.txt
+├── README.md
+
 ```
 
 ## ⚙️ Requirements
@@ -41,6 +58,7 @@ ai-drone-simulator/
 - PyTorch
 - torchvision
 - OpenCV
+- Flask>=2.0.0
 
 ### Install with:
 
