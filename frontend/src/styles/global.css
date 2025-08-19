@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ✅ 다크모드 고정 기본값 */
+body {
+  @apply bg-gray-900 text-gray-100;
+}
