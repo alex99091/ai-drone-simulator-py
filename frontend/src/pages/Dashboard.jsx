@@ -1,45 +1,7 @@
-import { useState, useEffect } from "react";
+import { useDroneMetrics } from "../api/useDroneMetrics";
 
 export default function Dashboard() {
-  const [alertsOn, setAlertsOn] = useState(false);
-  const [metrics, setMetrics] = useState({
-    cpu: 0,
-    memory: 0,
-    disk: 0,
-    traffic: "0 Mbps",
-    status: "Loading...",
-  });
-
-  // metrics API 불러오기
-  useEffect(() => {
-    async function fetchMetrics() {
-      try {
-        const res = await fetch("/api/metrics");
-        const data = await res.json();
-        setMetrics(data);
-      } catch (err) {
-        console.error("Failed to fetch metrics", err);
-      }
-    }
-
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 5000); // 5초마다 새로고침
-    return () => clearInterval(interval);
-  }, []);
-
-  // Alerts 토글 API
-  const toggleAlerts = async (state) => {
-    setAlertsOn(state);
-    try {
-      await fetch("/api/telegram-alerts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: state }),
-      });
-    } catch (err) {
-      console.error("Failed to toggle alerts", err);
-    }
-  };
+  const { metrics, alertsOn, toggleAlerts } = useDroneMetrics();
 
   return (
     <div className="flex-1 bg-gray-900 p-6 text-gray-100">
@@ -47,39 +9,39 @@ export default function Dashboard() {
         Monitoring Dashboard
       </h1>
 
-      {/* 주요 지표 그리드 */}
+      {/* 주요 지표 */}
       <div className="grid grid-cols-4 gap-6">
-        {/* 서버 상태 */}
+        {/* Battery */}
         <div className="col-span-1 bg-gray-800 rounded-2xl shadow p-4">
-          <h2 className="font-semibold mb-2 text-gray-400">Server Status</h2>
-          <p className="text-green-400 font-bold">{metrics.status}</p>
+          <h2 className="font-semibold mb-2 text-gray-400">Battery</h2>
+          <p className="text-green-400 font-bold">{metrics.battery} %</p>
         </div>
 
-        {/* CPU */}
+        {/* Wifi */}
         <div className="col-span-1 bg-gray-800 rounded-2xl shadow p-4">
-          <h2 className="font-semibold mb-2 text-gray-400">CPU Usage</h2>
-          <p className="text-xl font-bold">{metrics.cpu}%</p>
+          <h2 className="font-semibold mb-2 text-gray-400">Wifi</h2>
+          <p className="text-xl font-bold">{metrics.wifi}</p>
         </div>
 
-        {/* Memory */}
+        {/* Speed */}
         <div className="col-span-1 bg-gray-800 rounded-2xl shadow p-4">
-          <h2 className="font-semibold mb-2 text-gray-400">Memory Usage</h2>
-          <p className="text-xl font-bold">{metrics.memory}%</p>
+          <h2 className="font-semibold mb-2 text-gray-400">Speed</h2>
+          <p className="text-xl font-bold">{metrics.speed} m/s</p>
         </div>
 
-        {/* Disk */}
+        {/* Height */}
         <div className="col-span-1 bg-gray-800 rounded-2xl shadow p-4">
-          <h2 className="font-semibold mb-2 text-gray-400">Disk Usage</h2>
-          <p className="text-xl font-bold">{metrics.disk}%</p>
+          <h2 className="font-semibold mb-2 text-gray-400">Height</h2>
+          <p className="text-xl font-bold">{metrics.height} m</p>
         </div>
 
-        {/* Network Traffic */}
+        {/* Network */}
         <div className="col-span-2 bg-gray-800 rounded-2xl shadow p-4">
           <h2 className="font-semibold mb-2 text-gray-400">Network Traffic</h2>
           <p className="text-xl font-bold text-blue-400">{metrics.traffic}</p>
         </div>
 
-        {/* Alerts 토글 */}
+        {/* Alerts */}
         <div className="col-span-2 bg-gray-800 rounded-2xl shadow p-4">
           <h2 className="font-semibold text-gray-400 mb-3">Alerts</h2>
           <div className="flex gap-4">
