@@ -6,7 +6,7 @@ export default function Header() {
       
       {/* 센터 타이틀 */}
       <h1 className="text-xl font-semibold text-white">
-        DJI Tello & Python RealTime Server
+        DJI Tello Project
       </h1>
       
       {/* 오른쪽은 비워둠 */}
