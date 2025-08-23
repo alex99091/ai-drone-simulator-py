@@ -5,7 +5,7 @@ DJI Tello 드론 실기기에서 영상을 수집하고, **OpenCV + YOLOv8**로 
 백엔드는 **Django**로, **Control / Status / Stream** API를 **분리하고 우선순위를 부여**해 영상 부하 상황에서도 제어 안정성 확보   
 프론트는 **Vite + React 단일 대쉬보드**로 상태 지표(FPS/배터리/지연)와 제어등 표시   
 
-> 이 프로젝트는 **Python 생태계(Django·OpenCV·YOLO)**로 **드론–AI–서버를 통합한 E2E 시스템**을 구현.   
+> 이 프로젝트는 Python 생태계(Django·OpenCV·YOLO)로 드론–AI–서버를 통합한 E2E 시스템**을 구현.   
 
 ---
 
