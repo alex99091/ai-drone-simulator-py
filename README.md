@@ -21,33 +21,51 @@ and moves a virtual drone accordingly
 ```bash
 
 ai-drone-simulator-py/
-├── backend/
-│   ├── app/                        # 실행 스크립트 모음
-│   │   ├── simulate_drone.py      # 실시간 YOLO + 드론 시뮬
-│   │   ├── run_detector.py        # 감지기 단독 실행
-│   │   ├── run_tracker.py         # 드론 추적기 테스트
-│   │   └── run_api.py             # Flask API 실행 엔트리포인트
-│   ├── api/                        # Flask API 구성
-│   │   ├── __init__.py
-│   │   ├── controller.py          # 라우터 정의
-│   │   ├── dto.py                 # 요청/응답 모델 정의
-│   │   └── service.py             # 드론 추적 로직 래퍼
-│   ├── config/
-│   │   └── settings.py            # 기본 설정값
-│   ├── core/
-│   │   ├── detector.py            # YOLO 기반 사람 감지
-│   │   ├── drone.py               # 드론 객체 로직
-│   │   ├── tracker.py             # 드론 위치 추적기
-│   │   └── visualizer.py          # 시각화 로직 (OpenCV)
-│   ├── utils/
-│   │   └── helper.py              # 범용 함수들
-│   ├── tests/                     # 단위 테스트
-│   │   ├── test_detector.py
-│   │   ├── test_drone.py
-│   │   ├── test_tracker.py
-│   │   ├── test_visualizer.py
-│   │   └── test_api_service.py   # (작성 예정)
-│   └── requirements.txt
+├── backend/backend/
+├─ manage.py
+├─ pyproject.toml / requirements.txt
+├─ .env                      # 백엔드 환경변수 (프론트 .env와 별도)
+├─ backend/                  # Django 프로젝트 루트 (settings/asgi/urls)
+│  ├─ __init__.py
+│  ├─ settings.py            # Channels/Redis/CORS/INSTALLED_APPS 설정
+│  ├─ urls.py                # HTTP 라우팅(/api, /video)
+│  ├─ asgi.py                # ASGI + ProtocolTypeRouter
+│  └─ routing.py             # Channels 라우팅(WebSocket URLConf)
+├─ apps/
+│  ├─ api/                   # HTTP API (status 등)
+│  │  ├─ __init__.py
+│  │  ├─ urls.py             # /api/ 하위 엔드포인트
+│  │  └─ views.py            # GET /api/tello/status
+│  ├─ stream/                # 영상 스트리밍(MJPEG 변환)
+│  │  ├─ __init__.py
+│  │  ├─ views.py            # GET /video (StreamingHttpResponse)
+│  │  └─ services.py         # 프레임 그랩/인코딩(OpenCV/ffmpeg) 관리
+│  ├─ ws/                    # WebSocket(명령/상태) Consumers
+│  │  ├─ __init__.py
+│  │  ├─ consumers.py        # CommandConsumer, StatusConsumer
+│  │  └─ utils.py            # 메시지 검증/직렬화
+│  ├─ control/               # 명령 처리(우선순위 큐, ack)
+│  │  ├─ __init__.py
+│  │  ├─ priority.py         # emergency/land 우선 처리 PQ
+│  │  ├─ dispatcher.py       # 큐→Tello 전송 스레드/비동기 처리
+│  │  └─ schemas.py          # {action,direction,speed} 검증 스키마
+│  ├─ telemetry/             # 상태 수집/배포(폴링 10s + 캐시)
+│  │  ├─ __init__.py
+│  │  ├─ collector.py        # 10초마다 Tello 상태 수집
+│  │  ├─ broadcaster.py      # WS 구독자에게 telemetry 푸시
+│  │  └─ store.py            # Redis에 최신 스냅샷 저장/로드
+│  ├─ adapters/              # 외부(Tello SDK/UDP) 어댑터
+│  │  ├─ __init__.py
+│  │  ├─ tello_sdk.py        # 명령 소켓, 상태 UDP(8890), 비디오 UDP(11111)
+│  │  └─ video_capture.py    # 비디오 프레임 수신/디코드
+│  └─ common/                # 공통 유틸/예외/로깅/헬스체크
+│     ├─ __init__.py
+│     ├─ errors.py
+│     ├─ health.py           # /healthz, /readyz
+│     └─ logging.py
+└─ ops/
+   ├─ docker/                # Dockerfile/compose(옵션)
+   └─ scripts/               # 개발/운영 스크립트 (runserver, worker 등)
 ├── README.md
 
 ```
