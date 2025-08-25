@@ -1,3 +1,4 @@
+# apps/adapters/tello_sdk.py
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple, Dict
@@ -17,24 +18,44 @@ class TelloSDK:
     """
     - send_command(): UDP 8889 전송/응답 대기
     - start_state_listener(): UDP 8890 수신 루프
+    - ensure_state_bound(): 필요 시 런타임에 상태소켓 바인드
     """
 
-    def __init__(self, config: TelloConfig):
+    def __init__(self, config: TelloConfig, *, bind_state: bool = True):
         self.cfg = config
         self._cmd_sock: Optional[socket.socket] = None
         self._state_sock: Optional[socket.socket] = None
         self._state_running = False
         self._state_thread: Optional[threading.Thread] = None
+        self._wants_state = bool(bind_state)
         logger.info("[TelloSDK] init mock=%s ip=%s", self.cfg.mock, self.cfg.ip)
 
         if not self.cfg.mock:
-            # 명령 소켓: 바인드 없이 송신만, 응답은 recvfrom
+            # 명령 소켓 준비
             self._cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._cmd_sock.settimeout(5.0)
-            # 상태 소켓: 8890 수신 대기
-            self._state_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self._state_sock.bind(("", self.cfg.state_port))
-            self._state_sock.settimeout(1.0)
+            if self._wants_state:
+                self._bind_state_socket()
+
+    # ---- 내부: 상태 소켓 바인드 ----
+    def _bind_state_socket(self):
+        if self.cfg.mock or self._state_sock is not None:
+            return
+        self._state_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # SO_REUSEADDR는 macOS에서도 도움되지만, 동일 포트 중복 bind는 불가
+        self._state_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._state_sock.bind(("", self.cfg.state_port))
+        self._state_sock.settimeout(1.0)
+        logger.info("[TelloSDK] state socket bound (udp:%d)", self.cfg.state_port)
+
+    def ensure_state_bound(self):
+        """나중에 필요해지면 동적으로 상태 소켓을 바인드"""
+        try:
+            self._wants_state = True
+            self._bind_state_socket()
+        except OSError as e:
+            logger.warning("[TelloSDK] ensure_state_bound failed: %s", e)
+            raise
 
     # --- Commands ---
     def send_command(self, command: str, timeout: float = 5.0) -> Tuple[bool, str]:
@@ -62,7 +83,6 @@ class TelloSDK:
     def start_state_listener(self, on_state: Callable[[Dict], None]) -> Callable[[], None]:
         self._state_running = True
         if self.cfg.mock:
-            # 모의: 주기적으로 빈 dict 콜백(collector가 mock 처리)
             def loop_mock():
                 while self._state_running:
                     on_state({})
@@ -74,33 +94,27 @@ class TelloSDK:
                 self._state_running = False
             return stop
 
-        if not self._state_sock:
-            raise RuntimeError("state socket not ready")
+        # 필요 시 상태 소켓 바인드
+        if self._state_sock is None:
+            self.ensure_state_bound()
 
         def _parse(line: str) -> Dict:
-            # 예시: "pitch:0;roll:0;yaw:5;vgx:0;vgy:0;vgz:0;templ:68;temph:70;tof:10;h:10;bat:87;baro:30.49;time:0;agx:0.00;agy:0.00;agz:-999.00;"
             out: Dict[str, float] = {}
             for kv in line.strip().split(";"):
-                if not kv: continue
-                if ":" not in kv: continue
+                if not kv or ":" not in kv: continue
                 k, v = kv.split(":", 1)
-                try:
-                    out[k] = float(v)
-                except ValueError:
-                    pass
-            # 필요한 키만 변환/정규화
-            snap = {
+                try: out[k] = float(v)
+                except ValueError: pass
+            return {
                 "battery": int(out.get("bat", 0)),
-                "height": round(out.get("h", 0.0) / 100.0, 2),  # cm -> m
+                "height": round(out.get("h", 0.0) / 100.0, 2),
                 "yaw": int(out.get("yaw", 0.0)),
                 "pitch": int(out.get("pitch", 0.0)),
                 "roll": int(out.get("roll", 0.0)),
-                # 속도(cm/s) 그대로 전달(collector에서 m/s 적분용)
                 "_vgx": out.get("vgx", 0.0),
                 "_vgy": out.get("vgy", 0.0),
                 "_vgz": out.get("vgz", 0.0),
             }
-            return snap
 
         def loop():
             logger.info("[TelloSDK] state listener started (udp:%d)", self.cfg.state_port)
@@ -108,8 +122,7 @@ class TelloSDK:
                 try:
                     data, _ = self._state_sock.recvfrom(2048)
                     txt = data.decode(errors="ignore")
-                    snap = _parse(txt)
-                    on_state(snap)
+                    on_state(_parse(txt))
                 except socket.timeout:
                     continue
                 except Exception as e:
@@ -132,19 +145,29 @@ class TelloSDK:
         except Exception:
             pass
         for s in (self._state_sock, self._cmd_sock):
-            try:
-                s and s.close()
-            except Exception:
-                pass
+            try: s and s.close()
+            except Exception: pass
         logger.info("[TelloSDK] close() done")
 
-def build_from_settings(django_settings) -> TelloSDK:
+# -------- 싱글턴 팩토리 --------
+_singleton: Optional[TelloSDK] = None
+def get_sdk_singleton(django_settings, *, bind_state: bool) -> TelloSDK:
+    global _singleton
     mock_default = str(os.getenv("TELLO_MOCK", "true")).lower() == "true" or django_settings.DEBUG
-    cfg = TelloConfig(
-        ip=django_settings.TELLO["IP"],
-        cmd_port=django_settings.TELLO["CMD_PORT"],
-        state_port=django_settings.TELLO["STATE_PORT"],
-        video_port=django_settings.TELLO["VIDEO_PORT"],
-        mock=mock_default is True and str(os.getenv("TELLO_MOCK", "")).lower() != "false",
-    )
-    return TelloSDK(cfg)
+    if _singleton is None:
+        cfg = TelloConfig(
+            ip=django_settings.TELLO["IP"],
+            cmd_port=django_settings.TELLO["CMD_PORT"],
+            state_port=django_settings.TELLO["STATE_PORT"],
+            video_port=django_settings.TELLO["VIDEO_PORT"],
+            mock=(mock_default is True and str(os.getenv("TELLO_MOCK","")).lower() != "false"),
+        )
+        _singleton = TelloSDK(cfg, bind_state=bind_state)
+    else:
+        if bind_state:
+            _singleton.ensure_state_bound()
+    return _singleton
+
+# (이전과 호환용) — 새 코드는 get_sdk_singleton 사용 권장
+def build_from_settings(django_settings) -> TelloSDK:
+    return get_sdk_singleton(django_settings, bind_state=True)

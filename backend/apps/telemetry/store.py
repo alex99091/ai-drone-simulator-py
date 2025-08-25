@@ -1,58 +1,108 @@
 from __future__ import annotations
-import json, time, logging
-from typing import Dict, Any, Optional
+import json
+import logging
+from typing import Any, Optional
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-_default = {
-    "battery": 0, "height": 0, "yaw": 0, "pitch": 0, "roll": 0,
-    "pos": {"x": 0, "y": 0, "z": 0},
-    "wifi": 0, "speed": 0, "traffic": "0 Mbps",
-}
+# 고정 키 (프론트 API 스키마 영향 없음)
+_SNAPSHOT_KEY = "telemetry:snapshot"
 
-_mem: Dict[str, Any] = {"snapshot": _default.copy(), "ts": 0.0}
+# 런타임 백엔드 선택 (settings로부터)
+_use_redis = (
+    getattr(settings, "TELEMETRY_CACHE_BACKEND", "memory") == "redis"
+    and bool(getattr(settings, "TELEMETRY_REDIS_URL", "").strip())
+)
 
-def _redis_client():
+_r = None
+if _use_redis:
     try:
-        import redis
-        from urllib.parse import urlparse
-        from django.conf import settings
-        parsed = urlparse(settings.REDIS_URL)
-        return redis.Redis(
-            host=parsed.hostname, port=parsed.port,
-            db=int((parsed.path or "/0").lstrip("/")),
-            socket_connect_timeout=0.5, socket_timeout=0.5,
+        import redis  # redis-py
+        _r = redis.from_url(
+            settings.TELEMETRY_REDIS_URL,
+            decode_responses=True,  # str로 입출력
         )
+        _r.ping()
+        logger.info("[telemetry.store] redis connected: %s", settings.TELEMETRY_REDIS_URL)
     except Exception as e:
-        logger.debug("[telemetry.store] Redis unavailable: %s", e)
-        return None
+        logger.warning("[telemetry.store] redis init failed -> fallback to memory: %s", e)
+        _r = None
 
-KEY = "telemetry:snapshot"
+# 메모리 캐시(프로세스 로컬)
+_mem: dict[str, Any] = {}
 
-def set_snapshot(data: Dict[str, Any]) -> None:
-    # 키 이름 맞춤(없는 키는 기본값으로 보정)
-    snap = {**_default, **data}
-    if "pos" in data and isinstance(data["pos"], dict):
-        snap["pos"] = {**_default["pos"], **data["pos"]}
-    r = _redis_client()
-    if r:
+def _serialize(data: dict[str, Any]) -> str:
+    try:
+        return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+    except Exception as e:
+        logger.warning("[telemetry.store] serialize failed: %s", e)
+        return "{}"
+
+def _deserialize(s: Optional[str]) -> dict[str, Any]:
+    if not s:
+        return {}
+    try:
+        return json.loads(s)
+    except Exception as e:
+        logger.warning("[telemetry.store] deserialize failed: %s", e)
+        return {}
+
+def set(data: dict[str, Any], ttl: Optional[int] = None) -> None:
+    """
+    텔레메트리 스냅샷 저장.
+    ttl=None 허용. Redis일 때만 ex=int(ttl) 전달, None이면 ex 미전달.
+    """
+    if _r is not None:
         try:
-            r.set(KEY, json.dumps({"data": snap, "ts": time.time()}))
+            payload = _serialize(data)
+            if ttl is not None:
+                _r.set(_SNAPSHOT_KEY, payload, ex=int(ttl))
+            else:
+                _r.set(_SNAPSHOT_KEY, payload)  # ex 미전달
             return
         except Exception as e:
             logger.warning("[telemetry.store] Redis set failed: %s", e)
-    # fallback: memory
-    _mem["snapshot"] = snap
-    _mem["ts"] = time.time()
 
-def get_snapshot() -> Dict[str, Any]:
-    r = _redis_client()
-    if r:
+    # 메모리 폴백
+    _mem[_SNAPSHOT_KEY] = data
+
+def get(default: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """
+    텔레메트리 스냅샷 읽기. 없으면 default 또는 {}.
+    """
+    if _r is not None:
         try:
-            v = r.get(KEY)
-            if v:
-                payload = json.loads(v)
-                return payload.get("data", _default.copy())
+            s = _r.get(_SNAPSHOT_KEY)
+            data = _deserialize(s)
+            if data:
+                return data
         except Exception as e:
             logger.warning("[telemetry.store] Redis get failed: %s", e)
-    return _mem.get("snapshot", _default.copy())
+
+    return (_mem.get(_SNAPSHOT_KEY) or default or {}).copy()
+
+def ping() -> bool:
+    if _r is None:
+        return True
+    try:
+        _r.ping()
+        return True
+    except Exception:
+        return False
+
+# --- 호환 별칭 (과거 코드와 100% 호환) ---
+write_snapshot = set
+read_snapshot = get
+set_status_snapshot = set
+get_status_snapshot = get
+# collector가 기대하는 이름(당신 로그의 ImportError 원인)
+set_snapshot = set
+get_snapshot = get
+
+__all__ = [
+    "set", "get", "ping",
+    "write_snapshot", "read_snapshot",
+    "set_status_snapshot", "get_status_snapshot",
+    "set_snapshot", "get_snapshot",
+]
